@@ -62,6 +62,8 @@ new.var  <- car::recode(old.var, " 1:2 = 'A'; 3 = 'C'; '' = NA; else = 'B' ")
 
 #from here on we will primarily use ddply (plyr) and ggplot(ggplot2) to calculate different summary metrics or predictive methods to determine the ideal matching principle, namely (1) how closely the inclusion/exclusion criteria should be matched between databases, (2) how many variables we should have in terms of matching, and (3) what kinds of prediction models would generate the best results
 
+#once the matching is working, we will then do the same analysis but now using RDF, simulating them under two different sparql endpoints
+
 
 
 ###########################################################################################
