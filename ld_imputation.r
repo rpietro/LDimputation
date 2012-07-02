@@ -1,10 +1,6 @@
 #######################################################################################
 #template_secondary_data_analysis.R is licensed under a Creative Commons Attribution - Non commercial 3.0 Unported License. see full license at the end of this file.
 #######################################################################################
-#this script follows a combination of the guidelines proposed by Hadley Wickham http://goo.gl/c04kq as well as using the formatR package http://goo.gl/ri6ky
-#if this is the first time you are conducting an analysis using this protocol, please watch http://goo.gl/DajIN while following step by step
-
-#link to manuscript
 
 #####################################################################################
 #SETTING ENVIRONMENT
@@ -14,49 +10,162 @@ rm(list = ls())
 ls()
 #dettach all packages
 detach()
+library(plyr)
+library(epicalc)
+library(psych)
 
-#command below will install individual and is only run once. remove the hash tag if this is the first time you are running the code on RStudio, and then you can add the hash tag again
-#install.packages("car", repos="http://cran.r-project.org")
-#install.packages("ggplot2", repos="http://cran.r-project.org")
-
-#command below will install each package. if you run this script from the beginning you need to run every single one again
-library("ggplot2")
-library("car")
-#####################################################################################
-#IMPORTING DATA AND RECODING
-#####################################################################################
-
-#if you are using a file that is local to your computer, then replace path below with path to the data file in your computer. command will send all the data into the templateData object. replace the word template.data by a name that might easier for you to remember and that represents your data. If you don't know where to get the path to your file, please watch http://goo.gl/i0cPh
-templateData <- read.csv("/Users/rpietro/Google Drive/R/nonpublicdata_publications/templateData.csv")
-
-#below will view data in a spreadsheet format. notice that in this all subsequent commands you have to replace templateData with whatever name you chose for your data object in the previous command
-
-View(templateData)
-
-#below will list variable names, classes (integer, factor, etc), alternative responses
-str(templateData)
-#list variable names so that they can be used later
-names(templateData)
-#below will attach your data so that when you execute a command you don't have to write the name of your data object over and over again
-attach(templateData)
-
-#function below is used to recode variables. things to notice: replace old.var with the variable you are recoding, replace new.var with the variable you want to create. the whole recoding happens within " ". all character and factor variables will be within '', numbers will be displayed with digits (not inside '') or NA (also without ''). see video at http://goo.gl/aDgo4 for more details
-
-new.var  <- car::recode(old.var, " 1:2 = 'A'; 3 = 'C'; '' = NA; else = 'B' ")
-
-######################################
-#Analysis plan
-######################################
-
+###########################
 #import both data sets, only containing the actual variables that we are going to use
+###########################
 
-#variables will be recoded with the name of the source database. in parallel with this section, we can try to do something using the tm package so that later on we can be prepared to do this using NLP
+NIS_full <- read.csv("/Users/rpietro/Google Drive/R/nonpublicdata_publications/LD_imputation/NIS2004.csv")
+str(NIS_full)
+SEER_full <- read.csv("/Users/rpietro/Google Drive/R/nonpublicdata_publications/LD_imputation/SEER2004.csv")
+str(SEER_full)
+View(SEER_full)
 
-#save both data sets and then send them to Francesco for the NIS data while Amrapali and Jose Eduardo (who is a computer scientist) look into the RDFization -- would be nice to do this using google refine if you think this would generate a good quality RDF
+#assigning unique identifiers to facilitate data visualization
+NIS_full$nis_id <- c(1:97372)
+SEER_full$seer_id <- c(1:249861)
 
+###########################
 #apply different inclusion/exclusion criteria into seer -- this will be one of the parameters we will be testing
+###########################
+
+# PAY1/PAY2 - "medicare"
+#NIS has all GI tumors and so has to subset
+
+#later will use select to pick specific variables
+SEER2004  <- subset(SEER_full, SEER_full$yrdxL==2004)
+NIS2004  <- NIS_full
+#View(SEER2004)
+
+#extracting a sample to make experiments faster
+NIS <- NIS2004[sample(1:nrow(NIS2004), 100,replace=FALSE),]
+SEER <- SEER2004[sample(1:nrow(SEER2004), 100,replace=FALSE),]
+#View(NIS)
+
+str(SEER)
+str(NIS)
+
+
+#########################
+#matching variables will be recoded to a common name, later on in compliance with caDSR. in parallel with this section, we can try to do something using the tm package so that later on we can be prepared to do this using NLP
+########################
+names(SEER)
+names(NIS)
+
+#gender and geographic region are the only ones truly working
+
+#recoding gender
+NIS$gender <- NA
+NIS$gender[NIS$FEMALE==1] <- "female"
+NIS$gender[NIS$FEMALE==0] <- "male"  
+NIS$gender  <- as.factor(NIS$gender)
+summary(NIS$gender)
+
+SEER$gender <- NA
+SEER$gender[SEER$S_SEX==2]  <- "female" 
+SEER$gender[SEER$S_SEX==1]  <- "male"
+SEER$gender  <- as.factor(SEER$gender)
+summary(SEER$gender)
+
+#recoding geographic region
+NIS$region <- NA
+NIS$region[NIS$HOSP_REGION==1]  <-  "northeast"
+NIS$region[NIS$HOSP_REGION==2]  <-  "midwest"
+NIS$region[NIS$HOSP_REGION==3]  <-  "south"
+NIS$region[NIS$HOSP_REGION==4]  <-  "west"
+NIS$region  <- as.factor(NIS$region)
+summary(NIS$region)
+
+SEER$region <- round(SEER$geography)
+SEER$region <- NA
+SEER$region[SEER$geography=="Northeast"]  <-  "northeast"
+SEER$region[SEER$geography=="Midwest"]  <-  "midwest"
+SEER$region[SEER$geography=="South"]  <-  "south"
+SEER$region[SEER$geography=="West"]  <-  "west"
+SEER$region  <- as.factor(SEER$region)
+summary(SEER$region)
+
+
+# #recoding age - age for SEER is too low
+# NIS$age_cat <- NA
+# NIS$age_cat[NIS$AGE<=60]  <-  "<60"
+# NIS$age_cat[NIS$AGE>60 & NIS$AGE<=70]  <-  "60 to 70"
+# NIS$age_cat[NIS$AGE>70]  <- ">70"
+# NIS$age_cat  <- as.factor(NIS$age_cat)
+# summary(NIS$age_cat)
+# 
+# SEER$age_cat <- NA
+# SEER$age_cat[SEER$age<=60]  <-  "<60"
+# SEER$age_cat[SEER$age>60 & SEER$age<=70]  <-  "60 to 70"
+# SEER$age_cat[SEER$age>70]  <- ">70"
+# SEER$age_cat  <- as.factor(SEER$age_cat)
+# summary(SEER$age_cat)
+# 
+# #recoding race
+# NIS$RACE <- round(NIS$RACE)
+# NIS$race <- NA
+# NIS$race[NIS$RACE==1]  <-  "white"
+# NIS$race[NIS$RACE==2]  <-  "black"
+# NIS$race[NIS$RACE==3]  <-  "hispanic"
+# NIS$race[NIS$RACE==4]  <-  "asian"
+# NIS$race[NIS$RACE==5]  <-  "native"
+# NIS$race[NIS$RACE==6]  <-  "other"
+# NIS$race  <- as.factor(NIS$race)
+# summary(NIS$race)
+# 
+# #below is missing the variable for hispanic
+# #View(SEER)
+# class(SEER$SRACE)
+# levels(SEER$SRACE)
+# SEER$SRACE <- round(SEER$SRACE)
+# SEER$SRACE <- NA
+# SEER$SRACE[SEER$SRACE==1]  <-  "white"
+# SEER$SRACE[SEER$SRACE==2]  <-  "black"
+# SEER$SRACE[SEER$SRACE==3]  <-  "native"
+# SEER$SRACE[SEER$SRACE==4]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==5]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==6]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==7]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==8]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==9]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==10]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==11]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==12]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==13]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==14]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==20]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==21]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==22]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==25]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==26]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==27]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==28]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==30]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==31]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==32]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==96]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==97]  <-  "asian"
+# SEER$SRACE[SEER$SRACE==98]  <-  "other"
+# SEER$SRACE[SEER$SRACE==99]  <-  "other"
+# 
+# SEER$SRACE  <- as.factor(SEER$SRACE)
+# summary(SEER$SRACE)
+
 
 #merge both data sets using seer as the basis -- this will actually create duplicate entries for seer when there is more than one matching subject as well as some missing values when there is no match -- this is ok
+
+#joining datasets
+combined_full <- join(SEER, NIS, by = c("gender", "region"))
+View(combined_full)
+describe(combined_full)
+#ordering columns and only picking the important ones
+combined_unsort <- combined_full[c("seer_id","nis_id", "gender", "region")]
+View(combined_unsort)
+#shorting by seer_id
+combined <- combined_unsort[order(combined_unsort$seer_id) , ]
 
 #calculate rates of missing rates over the total sample (equivalent to absence of a match) as well as number of matches for each subject in NIS
 
@@ -64,45 +173,6 @@ new.var  <- car::recode(old.var, " 1:2 = 'A'; 3 = 'C'; '' = NA; else = 'B' ")
 
 #once the matching is working, we will then do the same analysis but now using RDF, simulating them under two different sparql endpoints
 
-
-
-###########################################################################################
-#TABLE 1: DEMOGRAPHICS
-###########################################################################################
-#describes your entire dataset
-describe(templateData)
-
-summary(variable)
-qplot(variable)
-
-#t.test, where outcome is a continuous variable and predictor is a dichotomous variable
-t.test(outcome~predictor)
-
-#chi square test where both outcome and predictor are categorical variables
-CrossTable(outcome, predictor, chisq=TRUE, missing.include=TRUE, format="SAS", prop.r=FALSE)
-
-
-########################################################################################
-# TABLE WITH MODELS
-########################################################################################
-
-logisticmodel1  <- glm(outcome ~ predictor + confounder,family=binomial(link="logit"))
-summary(logisticmodel1) #gives you model results
-coefficients(logisticmodel1) # model coefficients
-confint(logisticmodel1, level=0.95) # CIs for model parameters 
-fitted(logisticmodel1) # predicted values
-residuals(logisticmodel1) # residuals
-influence(logisticmodel1) # regression diagnostics
-layout(matrix(c(1,2,3,4),2,2)) # creates the white space for 4 graphs/page 
-plot(logisticmodel1) #generates 4 graphs/page
-
-survivalmodel1 <- coxph(Surv(time_to_event, event_yes_no) ~ predictor + confounder1 + confounder2, ties="efron")
-#below will test for proportional hazards assumption
-prop.assump1 <- cox.zph(survivalmodel1) 
-print(prop.assump1) #display results for assumption 
-plot(prop.assump1)  #plot curves -- from the help page: "If the proportional hazards assumption is true, beta(t) will be a horizontal line. The printout gives a test for slope=0."
-#summary results for the model
-summary(survivalmodel1)
 
 #######################################################################################
 #template_secondary_data_analysis.R is licensed under a Creative Commons Attribution - Non commercial 3.0 Unported License. You are free: to Share — to copy, distribute and transmit the work to Remix — to adapt the work, under the following conditions: Attribution — You must attribute the work in the manner specified by the author or licensor (but not in any way that suggests that they endorse you or your use of the work). Noncommercial — You may not use this work for commercial purposes. With the understanding that: Waiver — Any of the above conditions can be waived if you get permission from the copyright holder. Public Domain — Where the work or any of its elements is in the public domain under applicable law, that status is in no way affected by the license. Other Rights — In no way are any of the following rights affected by the license: Your fair dealing or fair use rights, or other applicable copyright exceptions and limitations; The author's moral rights; Rights other persons may have either in the work itself or in how the work is used, such as publicity or privacy rights. Notice — For any reuse or distribution, you must make clear to others the license terms of this work. The best way to do this is with a link to this web page. For more details see http://creativecommons.org/licenses/by-nc/3.0/
